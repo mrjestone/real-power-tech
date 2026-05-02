@@ -8,7 +8,7 @@ import { macRegex } from "@/lib/validators/admin";
 import { normalizeMac } from "@/lib/utils";
 
 function newOrderReference() {
-  const ts = Date.now().toString();
+  const ts = Date.now().toString().slice(-11);
   const rnd = Math.random().toString(36).slice(2, 8).toUpperCase();
   return `RPT${ts}${rnd}`; // strictly alphanumeric
 }

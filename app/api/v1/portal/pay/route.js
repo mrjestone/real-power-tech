@@ -10,7 +10,7 @@ import { previewUssdPush, initiateUssdPush } from "@/lib/clickpesa";
 const SUPPORTED_PROVIDERS = new Set(["AIRTEL", "MIX_BY_YASS", "HALOPESA"]);
 
 function newOrderReference() {
-  const ts = Date.now().toString();
+  const ts = Date.now().toString().slice(-11);
   const rnd = Math.random().toString(36).slice(2, 8).toUpperCase();
   return `RPT${ts}${rnd}`; // strictly alphanumeric
 }
