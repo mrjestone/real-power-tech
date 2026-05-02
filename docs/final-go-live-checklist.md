@@ -143,6 +143,14 @@ Step 9 — Go‑live checks
 - [ ] Walled garden entries present on all routers
 - [ ] Rollback plan prepared (disable use‑radius / remove redirect if needed)
 
+Current rollback and test sequence:
+
+1. Disable RADIUS on the hotspot profile if a live test fails.
+2. Restore the hotspot login redirect page if the portal path is the issue.
+3. Verify the router can still reach the local hotspot login page before retrying.
+4. Re-run the hotspot login flow with a single test device and watch both router logs and the RADIUS service logs.
+5. If the tunnel is the blocker, confirm WireGuard handshake status before touching app-side code.
+
 Appendix — Notes and tips
 
 - If you see HTTPS CNA issues on some devices, ensure the immediate redirect points to your HTTPS portal domain and the router serves only its internal login page briefly before redirecting.

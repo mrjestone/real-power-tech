@@ -182,7 +182,7 @@ This document is intended for engineers/systems working on the RADIUS and router
 **Example:**
 
 ```
-https://rpt-phi.vercel.app/portal?mac=AA:BB:CC:DD:EE:FF&router=11:22:33:44:55:66
+https://rpt-phi.vercel.app/portal?mac=AA:BB:CC:DD:EE:FF
 ```
 
 **Flow:**
@@ -650,7 +650,7 @@ add dst-host=*.clickpesa.com comment="Payment Assets"
   <head>
     <meta
       http-equiv="refresh"
-      content="0; url=https://rpt-phi.vercel.app/portal?mac=$(mac)&router=$(mac)"
+      content="0; url=https://rpt-phi.vercel.app/portal?mac=$(mac)"
     />
   </head>
   <body>

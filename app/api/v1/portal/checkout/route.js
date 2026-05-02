@@ -48,14 +48,40 @@ export async function POST(req) {
 
   // Resolve hotspot location by routerIdentifier if provided (use normalized MAC)
   let hotspotLocationId = null;
-  if (normalizedRouterMac) {
+  const routerLooksLikeCustomerMac =
+    normalizedRouterMac &&
+    normalizedCustomerMac &&
+    normalizedRouterMac === normalizedCustomerMac;
+
+  if (normalizedRouterMac && !routerLooksLikeCustomerMac) {
     const loc = await HotspotLocation.findOne({
       routerIdentifier: normalizedRouterMac,
     }).select("_id");
-    if (!loc) return notFound("Hotspot location not registered");
-    hotspotLocationId = loc._id;
-  } else if (locationId) {
+    if (loc) {
+      hotspotLocationId = loc._id;
+    }
+  }
+
+  if (!hotspotLocationId && locationId) {
     hotspotLocationId = locationId; // fallback path if portal passes locationId
+  }
+
+  if (!hotspotLocationId) {
+    const activeLocations = await HotspotLocation.find({ status: "Active" })
+      .select("_id")
+      .lean();
+
+    if (activeLocations.length === 1) {
+      hotspotLocationId = activeLocations[0]._id;
+      console.warn("[Checkout API] Falling back to the only active hotspot location", {
+        normalizedRouterMac,
+        normalizedCustomerMac,
+      });
+    }
+  }
+
+  if (!hotspotLocationId) {
+    return notFound("Hotspot location not registered");
   }
 
   const orderReference = newOrderReference();
