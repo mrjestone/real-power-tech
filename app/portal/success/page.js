@@ -39,16 +39,31 @@ function PortalSuccessContent() {
       return;
     }
 
-    console.log("Redirecting to MikroTik auto-login page for MAC:", mac);
+    console.log("Submitting hotspot login directly for MAC:", mac);
 
-    // Redirect to MikroTik's login page
-    // The custom login.html will redirect to portal (already done)
-    // But we need to access the login-auth.html page for auto-submit
-    const hotspotIP = "192.168.88.1";
-    const authUrl = `http://${hotspotIP}/hotspot/login-auth.html`;
+    const hotspotUrl = "http://192.168.88.1/login";
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = hotspotUrl;
+    form.style.display = "none";
 
-    // Redirect to the auto-submit login page
-    window.location.href = authUrl;
+    const fields = {
+      username: mac,
+      password: mac,
+      dst: window.location.href,
+      popup: "true",
+    };
+
+    Object.entries(fields).forEach(([name, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
   }, [mac]);
 
   // Handle manual login button click
@@ -273,7 +288,7 @@ function PortalSuccessContent() {
           </div>
         )}
 
-        {/* Manual Connect Button - REMOVED (no longer needed with MikroTik API) */}
+        {/* Manual Connect Button - kept only as a hidden fallback if needed */}
 
         {orderReference && (
           <p className="text-xs text-muted-foreground mt-3">
