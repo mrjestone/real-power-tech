@@ -46,12 +46,23 @@ export async function POST(req) {
   // Optional shared-secret verification for FreeRADIUS rlm_rest
   const secret = process.env.RADIUS_REST_SECRET || "";
   if (secret) {
-    const headerProvided = req.headers.get("x-radius-secret") || "";
+    const headerProvided =
+      req.headers.get("x-radius-secret") ||
+      req.headers.get("x-radius-key") ||
+      req.headers.get("x-api-key") ||
+      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
+      "";
     const { searchParams } = new URL(req.url);
     const keyProvided = searchParams.get("key") || ""; // fallback way to supply secret
-    const provided = headerProvided || keyProvided;
+    const bodyProvided = (await req.clone().json().catch(() => ({})))?.secret || "";
+    const provided = headerProvided || keyProvided || bodyProvided;
     if (provided !== secret) {
-      console.log("❌ RADIUS Auth: Invalid secret");
+      console.log("❌ RADIUS Auth: Invalid secret", {
+        providedLength: provided.length,
+        headerProvided: Boolean(headerProvided),
+        keyProvided: Boolean(keyProvided),
+        bodyProvided: Boolean(bodyProvided),
+      });
       return new Response("Unauthorized", { status: 401 });
     }
   }
