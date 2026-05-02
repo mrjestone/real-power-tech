@@ -3,9 +3,9 @@ import Transaction from "@/models/Transaction";
 import ServicePackage from "@/models/ServicePackage";
 import HotspotLocation from "@/models/HotspotLocation";
 import HotspotSession from "@/models/HotspotSession";
-import { activateHotspotUser } from "@/lib/mikrotik";
 import { normalizeMac } from "@/lib/utils";
 import { json, badRequest, notFound } from "@/lib/apiResponse";
+import { grantRadiusAccess } from "@/lib/radiusGrant";
 
 /**
  * POST /api/v1/portal/activate-session
@@ -44,7 +44,7 @@ export async function POST(request) {
       });
     }
 
-    // Attempt MikroTik activation
+    // Attempt RADIUS activation (same path the router uses)
     console.log("🔄 Manual activation retry for order:", orderReference);
 
     const pkg = await ServicePackage.findById(tx.servicePackageId).lean();
@@ -80,81 +80,48 @@ export async function POST(request) {
       return notFound("Hotspot location not found");
     }
 
-    if (
-      !location.routerApiUrl ||
-      !location.routerApiUsername ||
-      !location.routerApiPassword
-    ) {
-      tx.activationStatus = "Failed";
-      tx.activationError = "Router API credentials not configured";
-      await tx.save();
-      return json({ error: "Router not configured for API access" }, 500);
-    }
-
     const sessionSeconds = Math.max(1, Number(pkg.durationMinutes) * 60);
     const username = normalizeMac(tx.customerMacAddress);
     const expiresAt = new Date(Date.now() + sessionSeconds * 1000);
 
-    console.log("📝 Retrying MikroTik activation:", {
+    console.log("📝 Retrying RADIUS grant:", {
       username,
       sessionSeconds,
       packageName: pkg.name,
       expiresAt: expiresAt.toISOString(),
     });
 
-    // Activate user on MikroTik router via Binary API
-    const activationResult = await activateHotspotUser({
-      locationId: tx.hotspotLocationId.toString(),
-      mac: username,
+    await grantRadiusAccess({
+      username,
+      hotspotLocationId: tx.hotspotLocationId,
+      orderReference: tx.orderReference,
       sessionSeconds,
       rateLimit: pkg.rateLimit || null,
-      orderReference: tx.orderReference,
     });
 
-    if (activationResult.success) {
-      console.log(
-        "✅ Manual activation successful:",
-        activationResult.mikrotikUserId
-      );
+    tx.activationStatus = "Retried";
+    tx.activationMethod = "radius";
+    tx.activatedAt = new Date();
+    tx.activationError = null;
+    await tx.save();
 
-      // Update transaction with activation details
-      tx.activationStatus = "Retried"; // Mark as retried to distinguish from webhook activation
-      tx.activationMethod = "mikrotik-api";
-      tx.activatedAt = new Date();
-      tx.mikrotikUserId = activationResult.mikrotikUserId;
-      await tx.save();
+    await HotspotSession.create({
+      username,
+      transactionId: tx._id,
+      hotspotLocationId: tx.hotspotLocationId,
+      startedAt: new Date(),
+      expiresAt,
+      activationMethod: "radius",
+      status: "Active",
+    });
 
-      // Create session tracking record (MongoDB will auto-cleanup via TTL)
-      await HotspotSession.create({
-        username,
-        transactionId: tx._id,
-        hotspotLocationId: tx.hotspotLocationId,
-        startedAt: new Date(),
-        expiresAt,
-        activationMethod: "mikrotik-api",
-        mikrotikUserId: activationResult.mikrotikUserId,
-        status: "Active",
-      });
+    console.log("✅ Manual RADIUS activation completed successfully");
 
-      console.log("✅ Manual activation completed successfully");
-
-      return json({
-        message: "Activation successful",
-        activationStatus: "Retried",
-        activatedAt: tx.activatedAt,
-      });
-    } else {
-      console.error("❌ Manual activation failed:", activationResult.error);
-
-      tx.activationStatus = "Failed";
-      tx.activationError = activationResult.error;
-      await tx.save();
-
-      return json(
-        { error: `Activation failed: ${activationResult.error}` },
-        500
-      );
-    }
+    return json({
+      message: "Activation successful",
+      activationStatus: "Retried",
+      activatedAt: tx.activatedAt,
+    });
   } catch (error) {
     console.error("❌ Manual activation exception:", error);
     return json({ error: error.message }, 500);
