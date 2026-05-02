@@ -85,6 +85,9 @@ function PortalContent({ mac, router }) {
       try {
         if (j.orderReference && typeof window !== "undefined") {
           window.sessionStorage.setItem("lastOrderReference", j.orderReference);
+          window.location.href = `/portal/success?orderReference=${encodeURIComponent(
+            j.orderReference
+          )}`;
         }
       } catch (_) {}
       setPayModalOpen(false);

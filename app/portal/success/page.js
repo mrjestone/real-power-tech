@@ -17,6 +17,7 @@ function PortalSuccessContent() {
   const [activationStatus, setActivationStatus] = useState("Pending"); // Track activation status
   const [activationError, setActivationError] = useState(null); // Track activation error
   const [retrying, setRetrying] = useState(false); // Track retry state
+  const [activationRetryAttempted, setActivationRetryAttempted] = useState(false);
 
   // Try to get MAC from localStorage as additional fallback
   useEffect(() => {
@@ -73,7 +74,7 @@ function PortalSuccessContent() {
       const data = await res.json();
 
       if (res.ok) {
-        setActivationStatus("Activated");
+        setActivationStatus("Retried");
         setActivationError(null);
         console.log("✅ Activation retry successful");
       } else {
@@ -112,6 +113,20 @@ function PortalSuccessContent() {
           setActivationError(j.activationError);
         }
 
+        const activationReady =
+          j.activationStatus === "Activated" || j.activationStatus === "Retried";
+
+        if (
+          j.status === "Completed" &&
+          !activationReady &&
+          mac &&
+          !retrying &&
+          !activationRetryAttempted
+        ) {
+          setActivationRetryAttempted(true);
+          void handleRetryActivation();
+        }
+
         // Extract MAC address from transaction (MOST RELIABLE SOURCE - from database)
         if (j.customerMacAddress) {
           console.log(
@@ -138,7 +153,7 @@ function PortalSuccessContent() {
         // 4. MAC address is available
         if (
           j.status === "Completed" &&
-          j.activationStatus === "Activated" &&
+          activationReady &&
           !loginAttempted &&
           mac
         ) {
