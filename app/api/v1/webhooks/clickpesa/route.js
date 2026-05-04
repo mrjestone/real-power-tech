@@ -2,13 +2,11 @@ import { dbConnect } from "@/lib/dbConnect";
 import Transaction from "@/models/Transaction";
 import { clickpesaChecksum } from "@/lib/utils";
 import ServicePackage from "@/models/ServicePackage";
-import RadiusReply from "@/models/RadiusReply";
-import RadiusAuth from "@/models/RadiusAuth";
 import HotspotLocation from "@/models/HotspotLocation";
 import HotspotSession from "@/models/HotspotSession";
 import { normalizeMac } from "@/lib/utils";
 import { rateLimit } from "@/lib/rateLimit";
-import { grantRadiusAccess } from "@/lib/radiusGrant";
+import { activateHotspotUser } from "@/lib/mikrotik";
 
 const limit = rateLimit({ windowMs: 10_000, max: 8 }); // 8 events per 10s per key
 
@@ -129,14 +127,11 @@ export async function POST(req) {
 
     console.log("💰 Payment successful - updating transaction to Completed");
 
-    // Radius-based activation (matches the router's live configuration)
+    // Direct MikroTik API activation (working approach from Nov 18, 2025)
     if (transitionedToCompleted) {
-      console.log("🚀 Granting user access via RADIUS session write");
+      console.log("🚀 Creating hotspot user via MikroTik API");
       try {
         const pkg = await ServicePackage.findById(tx.servicePackageId).lean();
-        const location = await HotspotLocation.findById(
-          tx.hotspotLocationId
-        ).lean();
 
         if (!pkg) {
           console.error("❌ ServicePackage not found:", tx.servicePackageId);
@@ -150,32 +145,29 @@ export async function POST(req) {
           console.error("❌ Transaction missing customerMacAddress");
           tx.activationStatus = "Failed";
           tx.activationError = "MAC address missing";
-        } else if (!location) {
-          console.error("❌ Hotspot location not found:", tx.hotspotLocationId);
-          tx.activationStatus = "Failed";
-          tx.activationError = "Location not found";
         } else {
           const sessionSeconds = Math.max(1, Number(pkg.durationMinutes) * 60);
           const username = normalizeMac(tx.customerMacAddress);
           const expiresAt = new Date(Date.now() + sessionSeconds * 1000);
 
-          console.log("📝 Creating RADIUS session grant:", {
-            username,
+          console.log("📝 Activating MikroTik user:", {
+            mac: username,
             sessionSeconds,
             packageName: pkg.name,
-            expiresAt: expiresAt.toISOString(),
+            orderReference: tx.orderReference,
           });
 
-          await grantRadiusAccess({
-            username,
-            hotspotLocationId: tx.hotspotLocationId,
-            orderReference: tx.orderReference,
+          const result = await activateHotspotUser({
+            locationId: tx.hotspotLocationId,
+            mac: username,
             sessionSeconds,
             rateLimit: pkg.rateLimit || null,
+            orderReference: tx.orderReference,
           });
 
           tx.activationStatus = "Activated";
-          tx.activationMethod = "radius";
+          tx.activationMethod = "mikrotik-api";
+          tx.mikrotikUserId = result.mikrotikUserId || "created";
           tx.activatedAt = new Date();
           tx.activationError = null;
 
@@ -185,15 +177,15 @@ export async function POST(req) {
             hotspotLocationId: tx.hotspotLocationId,
             startedAt: new Date(),
             expiresAt,
-            activationMethod: "radius",
+            activationMethod: "mikrotik-api",
             status: "Active",
           });
-          console.log("✅ Session tracking record created for RADIUS flow");
+          console.log("✅ Session tracking record created for MikroTik flow");
 
-          console.log("🎉 RADIUS access grant completed successfully");
+          console.log("🎉 MikroTik user activation completed successfully");
         }
       } catch (e) {
-        console.error("❌ RADIUS grant exception:", e.message);
+        console.error("❌ MikroTik activation exception:", e.message);
         console.error("   Stack:", e.stack);
         tx.activationStatus = "Failed";
         tx.activationError = e.message;

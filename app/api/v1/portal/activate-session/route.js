@@ -5,7 +5,7 @@ import HotspotLocation from "@/models/HotspotLocation";
 import HotspotSession from "@/models/HotspotSession";
 import { normalizeMac } from "@/lib/utils";
 import { json, badRequest, notFound } from "@/lib/apiResponse";
-import { grantRadiusAccess } from "@/lib/radiusGrant";
+import { activateHotspotUser } from "@/lib/mikrotik";
 
 /**
  * POST /api/v1/portal/activate-session
@@ -84,23 +84,24 @@ export async function POST(request) {
     const username = normalizeMac(tx.customerMacAddress);
     const expiresAt = new Date(Date.now() + sessionSeconds * 1000);
 
-    console.log("📝 Retrying RADIUS grant:", {
+    console.log("📝 Retrying MikroTik user creation:", {
       username,
       sessionSeconds,
       packageName: pkg.name,
-      expiresAt: expiresAt.toISOString(),
+      orderReference: tx.orderReference,
     });
 
-    await grantRadiusAccess({
-      username,
-      hotspotLocationId: tx.hotspotLocationId,
-      orderReference: tx.orderReference,
+    const result = await activateHotspotUser({
+      locationId: tx.hotspotLocationId,
+      mac: username,
       sessionSeconds,
       rateLimit: pkg.rateLimit || null,
+      orderReference: tx.orderReference,
     });
 
     tx.activationStatus = "Retried";
-    tx.activationMethod = "radius";
+    tx.activationMethod = "mikrotik-api";
+    tx.mikrotikUserId = result.mikrotikUserId || "created";
     tx.activatedAt = new Date();
     tx.activationError = null;
     await tx.save();
@@ -111,11 +112,11 @@ export async function POST(request) {
       hotspotLocationId: tx.hotspotLocationId,
       startedAt: new Date(),
       expiresAt,
-      activationMethod: "radius",
+      activationMethod: "mikrotik-api",
       status: "Active",
     });
 
-    console.log("✅ Manual RADIUS activation completed successfully");
+    console.log("✅ Manual MikroTik activation completed successfully");
 
     return json({
       message: "Activation successful",
