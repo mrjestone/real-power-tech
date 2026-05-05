@@ -25,7 +25,7 @@ export async function POST(request) {
     }
 
     // Find the transaction
-    const tx = await Transaction.findOne({ orderReference });
+    let tx = await Transaction.findOne({ orderReference });
     if (!tx) {
       return notFound("Transaction not found");
     }
@@ -35,14 +35,65 @@ export async function POST(request) {
       return badRequest("Payment not completed");
     }
 
-    // If already activated, return success
-    if (tx.activationStatus === "Activated") {
+    // If already activated/retried, return success (idempotent behavior)
+    if (tx.activationStatus === "Activated" || tx.activationStatus === "Retried") {
       return json({
         message: "Already activated",
-        activationStatus: "Activated",
+        activationStatus: tx.activationStatus,
         activatedAt: tx.activatedAt,
       });
     }
+
+    // If another request is currently activating this order, do not run a second activation.
+    if (tx.activationStatus === "Activating") {
+      return json(
+        {
+          message: "Activation already in progress",
+          activationStatus: "Activating",
+        },
+        202
+      );
+    }
+
+    // Acquire activation lock atomically to prevent duplicate activation races.
+    const lockedTx = await Transaction.findOneAndUpdate(
+      {
+        _id: tx._id,
+        activationStatus: { $in: ["Pending", "Failed"] },
+      },
+      {
+        $set: {
+          activationStatus: "Activating",
+          activationError: null,
+        },
+      },
+      { new: true }
+    );
+
+    if (!lockedTx) {
+      // State changed between reads (another worker likely acquired lock or finished).
+      tx = await Transaction.findById(tx._id);
+      if (
+        tx &&
+        (tx.activationStatus === "Activated" || tx.activationStatus === "Retried")
+      ) {
+        return json({
+          message: "Already activated",
+          activationStatus: tx.activationStatus,
+          activatedAt: tx.activatedAt,
+        });
+      }
+
+      return json(
+        {
+          message: "Activation already in progress",
+          activationStatus: "Activating",
+        },
+        202
+      );
+    }
+
+    tx = lockedTx;
 
     // Attempt RADIUS activation (same path the router uses)
     console.log("🔄 Manual activation retry for order:", orderReference);

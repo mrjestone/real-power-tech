@@ -27,7 +27,7 @@ const TransactionSchema = new mongoose.Schema(
     // Activation tracking
     activationStatus: {
       type: String,
-      enum: ["Pending", "Activated", "Failed", "Retried"],
+      enum: ["Pending", "Activating", "Activated", "Failed", "Retried"],
       default: "Pending",
     },
     activationMethod: {

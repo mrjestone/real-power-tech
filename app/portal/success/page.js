@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, Suspense } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  Suspense,
+  useRef,
+} from "react";
 import { useSearchParams } from "next/navigation";
 
 function PortalSuccessContent() {
@@ -18,6 +25,7 @@ function PortalSuccessContent() {
   const [activationError, setActivationError] = useState(null); // Track activation error
   const [retrying, setRetrying] = useState(false); // Track retry state
   const [activationRetryAttempted, setActivationRetryAttempted] = useState(false);
+  const retryRequestInFlight = useRef(false);
 
   // Try to get MAC from localStorage as additional fallback
   useEffect(() => {
@@ -74,8 +82,9 @@ function PortalSuccessContent() {
 
   // Handle retry activation
   const handleRetryActivation = async () => {
-    if (!orderReference) return;
+    if (!orderReference || retryRequestInFlight.current) return;
 
+    retryRequestInFlight.current = true;
     setRetrying(true);
     setError("");
 
@@ -100,6 +109,7 @@ function PortalSuccessContent() {
       setError(e.message || "Failed to retry activation");
       console.error("❌ Activation retry exception:", e);
     } finally {
+      retryRequestInFlight.current = false;
       setRetrying(false);
     }
   };
@@ -135,11 +145,13 @@ function PortalSuccessContent() {
           j.status === "Completed" &&
           !activationReady &&
           mac &&
-          !retrying &&
-          !activationRetryAttempted
+          !retryRequestInFlight.current
         ) {
-          setActivationRetryAttempted(true);
-          void handleRetryActivation();
+          setActivationRetryAttempted((alreadyAttempted) => {
+            if (alreadyAttempted) return true;
+            void handleRetryActivation();
+            return true;
+          });
         }
 
         // Extract MAC address from transaction (MOST RELIABLE SOURCE - from database)
