@@ -165,6 +165,10 @@ export async function POST(req) {
             orderReference: tx.orderReference,
           });
 
+          if (!result.success) {
+            throw new Error(result.error || "MikroTik activation failed");
+          }
+
           tx.activationStatus = "Activated";
           tx.activationMethod = "mikrotik-api";
           tx.mikrotikUserId = result.mikrotikUserId || "created";

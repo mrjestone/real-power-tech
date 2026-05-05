@@ -99,6 +99,14 @@ export async function POST(request) {
       orderReference: tx.orderReference,
     });
 
+    if (!result.success) {
+      tx.activationStatus = "Failed";
+      tx.activationMethod = "mikrotik-api";
+      tx.activationError = result.error || "MikroTik activation failed";
+      await tx.save();
+      return json({ error: tx.activationError }, 500);
+    }
+
     tx.activationStatus = "Retried";
     tx.activationMethod = "mikrotik-api";
     tx.mikrotikUserId = result.mikrotikUserId || "created";

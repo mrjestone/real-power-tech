@@ -215,6 +215,9 @@ function PortalSuccessContent() {
     return `${Math.max(1, Math.round(mins))} Minutes`;
   }, [durationMinutes, fallbackDuration]);
 
+  const activationNotComplete =
+    status === "Completed" && activationStatus !== "Activated";
+
   return (
     <div className="min-h-screen grid place-items-center bg-white p-6">
       <div className="text-center max-w-md">
@@ -263,8 +266,8 @@ function PortalSuccessContent() {
             : "Please wait while we confirm your payment. This may take a few seconds."}
         </p>
 
-        {/* Retry Activation Button - shown when activation failed */}
-        {status === "Completed" && activationStatus === "Failed" && (
+        {/* Retry Activation Button - shown while activation is not complete */}
+        {activationNotComplete && (
           <div className="mt-6">
             <button
               onClick={handleRetryActivation}
@@ -288,7 +291,20 @@ function PortalSuccessContent() {
           </div>
         )}
 
-        {/* Manual Connect Button - kept only as a hidden fallback if needed */}
+        {activationNotComplete && (
+          <div className="mt-4">
+            <button
+              onClick={handleManualLogin}
+              disabled={!mac}
+              className="px-6 py-3 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Connect Manually
+            </button>
+            <p className="text-xs text-muted-foreground mt-2">
+              Use this if automatic activation is delayed or unavailable.
+            </p>
+          </div>
+        )}
 
         {orderReference && (
           <p className="text-xs text-muted-foreground mt-3">
